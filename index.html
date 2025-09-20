@@ -1,10 +1,16 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>مواعيد التطعيمات - الشرقية</title>
+
+  <!-- Bootstrap RTL -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+
+  <!-- PapaParse لمعالجة CSV بشكل آمن -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+
   <style>
     body {
       background-color: #f8f9fa;
@@ -12,154 +18,207 @@
     }
     .card {
       border-radius: 1rem;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
     h1 {
-      margin-top: 20px;
-      margin-bottom: 20px;
-      font-weight: bold;
+      margin-top: 18px;
+      margin-bottom: 18px;
       color: #0d6efd;
-    }
-    table {
-      font-size: 0.95rem;
+      font-weight: 700;
     }
     th {
       background-color: #0d6efd;
-      color: white;
+      color: #fff;
+    }
+    .note-small { font-size: 0.9rem; color: #666; }
+    @media (max-width: 576px) {
+      h1 { font-size: 1.25rem; }
     }
   </style>
 </head>
 <body>
+  <div class="container my-4">
+    <h1 class="text-center">مواعيد جلسات التطعيم للأطفال</h1>
 
-<div class="container my-4">
-  <h1 class="text-center">مواعيد جلسات التطعيم للأطفال</h1>
+    <div class="card p-3 mb-3">
+      <div class="row g-2">
+        <div class="col-sm-6 col-md-4">
+          <label class="form-label">اختر الإدارة</label>
+          <select id="edara" class="form-select">
+            <option value="">-- اختر الإدارة --</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-md-4">
+          <label class="form-label">اختر الوحدة</label>
+          <select id="wahda" class="form-select">
+            <option value="">-- اختر الوحدة --</option>
+          </select>
+        </div>
+        <div class="col-sm-12 col-md-4 d-flex align-items-end gap-2">
+          <button id="searchBtn" class="btn btn-primary w-50">بحث</button>
+          <button id="resetBtn" class="btn btn-secondary w-50">مسح النتائج</button>
+        </div>
+      </div>
+    </div>
 
-  <div class="card p-4 mb-4">
-    <div class="row g-3">
-      <div class="col-md-4">
-        <label for="edara" class="form-label">اختر الإدارة:</label>
-        <select id="edara" class="form-select">
-          <option value="">-- اختر الإدارة --</option>
-        </select>
-      </div>
-      <div class="col-md-4">
-        <label for="wahda" class="form-label">اختر الوحدة:</label>
-        <select id="wahda" class="form-select">
-          <option value="">-- اختر الوحدة --</option>
-        </select>
-      </div>
-      <div class="col-md-4 d-flex align-items-end">
-        <button id="searchBtn" class="btn btn-primary me-2">بحث</button>
-        <button id="resetBtn" class="btn btn-secondary">مسح النتائج</button>
-      </div>
+    <p class="text-end note-small mb-2">لطباعة النتائج أو حفظها كـ PDF استخدم طباعة المتصفح (Ctrl/⌘ + P) — المتصفح يدعم العربية بشكل أفضل.</p>
+
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped text-center align-middle" id="data-table">
+        <thead>
+          <tr>
+            <th>الإدارة</th>
+            <th>الوحدة</th>
+            <th>من عمر شهرين إلى 9 شهور</th>
+            <th>الجرعات عند عمر سنة وسنة ونصف</th>
+            <th>بي سي جي</th>
+          </tr>
+        </thead>
+        <tbody id="data-table-body"></tbody>
+      </table>
     </div>
   </div>
 
-  <p class="text-end text-muted">لطباعة النتائج أو حفظها كـ PDF اضغط Ctrl+P في المتصفح</p>
-
-  <div class="table-responsive">
-    <table class="table table-bordered text-center align-middle">
-      <thead>
-        <tr>
-          <th>الإدارة</th>
-          <th>الوحدة</th>
-          <th>من عمر شهرين إلى 9 شهور</th>
-          <th>الجرعات عند عمر سنة وسنة ونصف</th>
-          <th>بي سي جي</th>
-        </tr>
-      </thead>
-      <tbody id="data-table-body"></tbody>
-    </table>
-  </div>
-</div>
-
 <script>
-let data = [];
+/**
+ * صفحة قراءة CSV وعرضه:
+ * - تستخدم PapaParse لقراءة vaccine_schedule.csv
+ * - تفصل العمود "الخامسة والمنشطه" بمرونة على علامات فصل متعددة
+ * - تعرض العمود الموحد ك: "القيمة الأولى - القيمة الثانية" مع الاحتفاظ بالأرقام إن وُجدت
+ */
+
+// عناصر DOM
 const edaraSelect = document.getElementById('edara');
 const wahdaSelect = document.getElementById('wahda');
 const tableBody = document.getElementById('data-table-body');
 const searchBtn = document.getElementById('searchBtn');
 const resetBtn = document.getElementById('resetBtn');
 
-// تحميل البيانات من ملف CSV
+let data = []; // مصفوفة الكائنات بعد القراءة
+
+// دالة لمقتطف الفصل المرن للعمود الذي يحتوي الخامسة والمنشطة
+function splitFifthBooster(text) {
+  if (!text) return { first: '', second: '' };
+  // نقسم على فواصل متعددة محتملة: الفاصلة العربية، الفاصلة الإنجليزية، شرطة، شرطة بمسافات، سلاش، فاصلة منقوطة...
+  const parts = text.split(/،|,|\/|;|؛|\s-\s| - | -|-/).map(p => p.trim()).filter(p => p.length > 0);
+  const first = parts[0] || '';
+  const second = parts.length > 1 ? parts.slice(1).join(' / ') : '';
+  return { first, second };
+}
+
+// تحميل ملف CSV باستخدام fetch + PapaParse
 fetch('vaccine_schedule.csv')
-  .then(res => res.text())
-  .then(text => {
-    let rows = text.split('\n').map(r => r.split(','));
-    rows.shift(); // إزالة العناوين
-    data = rows.filter(r => r.length >= 5).map(r => {
-      let fifthVal = '';
-      let boosterVal = '';
-      if (r[3]) {
-        let parts = r[3].split('،');
-        fifthVal = parts[0] ? parts[0].trim() : '';
-        boosterVal = parts[1] ? parts[1].trim() : '';
-      }
+  .then(r => {
+    if (!r.ok) throw new Error('تعذر تحميل ملف vaccine_schedule.csv. تأكد أنه موجود في نفس المجلد.');
+    return r.text();
+  })
+  .then(csvText => {
+    // نقرأ CSV بدون header تلقائي، ثم نأخذ الصف الأول كعناوين ونبني الصفوف بعده
+    const parsed = Papa.parse(csvText, { skipEmptyLines: true });
+    const rows = parsed.data;
+    if (!rows || rows.length === 0) return;
+
+    // الخروج إن لم يكن لدينا على الأقل 2 عمودين
+    // نعتبر أن الأعمدة بالترتيب: اداره, وحده, من الاولي الي الرابعه, الخامسه والمنشطه, بي سي جي
+    const header = rows[0];
+    const bodyRows = rows.slice(1);
+
+    data = bodyRows.map(r => {
+      // نتعامل مع صفوف يمكن أن تكون أقصر/أطول، لذا نستخدم فحص الطول
+      const edara = (r[0] || '').toString().trim();
+      const wahda = (r[1] || '').toString().trim();
+      const firstToFourth = (r[2] || '').toString().trim();
+      const fifthAndBooster = (r[3] || '').toString().trim();
+      const bcg = (r[4] || '').toString().trim();
+
+      const { first, second } = splitFifthBooster(fifthAndBooster);
+      // نص موحد: إذا وجد كلاهما نربط بـ " - " وإلا نعرض الموجود فقط
+      const combined = (first && second) ? `${first} - ${second}` : (first || second || '');
+
       return {
-        edara: r[0].trim(),
-        wahda: r[1].trim(),
-        firstToFourth: r[2].trim(),
-        combined: (fifthVal || boosterVal) ? 
-          `جرعة سنة: ${fifthVal} – جرعة سنة ونصف: ${boosterVal}` : '',
-        bcg: r[4] ? r[4].trim() : ''
+        edara, wahda, firstToFourth, combined, bcg
       };
     });
 
-    let edarats = [...new Set(data.map(d => d.edara))];
+    // ملء قائمة الإدارات uniq & مرتب
+    const edarats = [...new Set(data.map(d => d.edara).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'ar'));
     edarats.forEach(e => {
-      let option = document.createElement('option');
-      option.value = e;
-      option.textContent = e;
-      edaraSelect.appendChild(option);
+      const opt = document.createElement('option');
+      opt.value = e;
+      opt.textContent = e;
+      edaraSelect.appendChild(opt);
     });
+  })
+  .catch(err => {
+    console.error(err);
+    alert('حصل خطأ أثناء تحميل أو قراءة ملف vaccine_schedule.csv:\n' + err.message);
   });
 
-// عند تغيير الإدارة تحديث الوحدات
+// عند تغيير الإدارة: تحديث قائمة الوحدات
 edaraSelect.addEventListener('change', () => {
   wahdaSelect.innerHTML = '<option value="">-- اختر الوحدة --</option>';
-  if (edaraSelect.value) {
-    let wahdat = [...new Set(data.filter(d => d.edara === edaraSelect.value).map(d => d.wahda))];
-    wahdat.forEach(w => {
-      let option = document.createElement('option');
-      option.value = w;
-      option.textContent = w;
-      wahdaSelect.appendChild(option);
-    });
-  }
+  // إذا لا توجد إدارة مختارة لا نملأ
+  if (!edaraSelect.value) return;
+  const wahdat = [...new Set(data.filter(d => d.edara === edaraSelect.value).map(d => d.wahda).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'ar'));
+  wahdat.forEach(w => {
+    const opt = document.createElement('option');
+    opt.value = w;
+    opt.textContent = w;
+    wahdaSelect.appendChild(opt);
+  });
 });
 
-// البحث
-searchBtn.addEventListener('click', () => {
+// دالة لعرض النتائج في الجدول (تستخدم textContent للحفاظ على الأرقام والنصوص)
+function renderRows(rows) {
   tableBody.innerHTML = '';
-  let filtered = data;
+  if (!rows || rows.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 5;
+    td.textContent = 'لا توجد بيانات مطابقة.';
+    tr.appendChild(td);
+    tableBody.appendChild(tr);
+    return;
+  }
+  rows.forEach(d => {
+    const tr = document.createElement('tr');
+    [d.edara, d.wahda, d.firstToFourth, d.combined, d.bcg].forEach(text => {
+      const td = document.createElement('td');
+      td.textContent = text || '';
+      tr.appendChild(td);
+    });
+    tableBody.appendChild(tr);
+  });
+}
 
+// زر البحث: يعرض كل الوحدات للإدارة لو تم اختيار الادارة فقط، أو وحدة محددة
+searchBtn.addEventListener('click', () => {
+  let filtered = data.slice();
   if (edaraSelect.value) {
     filtered = filtered.filter(d => d.edara === edaraSelect.value);
   }
-
   if (wahdaSelect.value) {
     filtered = filtered.filter(d => d.wahda === wahdaSelect.value);
   }
-
-  filtered.forEach(d => {
-    let row = `<tr>
-      <td>${d.edara}</td>
-      <td>${d.wahda}</td>
-      <td>${d.firstToFourth}</td>
-      <td>${d.combined}</td>
-      <td>${d.bcg}</td>
-    </tr>`;
-    tableBody.innerHTML += row;
-  });
+  renderRows(filtered);
 });
 
-// إعادة الوضع الأولي
+// زر المسح: إعادة الحالة الأولية
 resetBtn.addEventListener('click', () => {
   edaraSelect.value = '';
   wahdaSelect.innerHTML = '<option value="">-- اختر الوحدة --</option>';
   tableBody.innerHTML = '';
 });
-</script>
 
+// اختصار: إمكانية الضغط على Enter داخل القوائم لتشغيل البحث
+[edaraSelect, wahdaSelect].forEach(el => {
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchBtn.click();
+    }
+  });
+});
+</script>
 </body>
 </html>
