@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>مواعيد التطعيمات - الشرقية</title>
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+  <!-- jsPDF و AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: "Tajawal", Arial, sans-serif;
+    }
+    .card {
+      border-radius: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 20px;
+      margin-bottom: 20px;
+      font-weight: bold;
+      color: #0d6efd;
+    }
+    table {
+      font-size: 0.95rem;
+    }
+    th {
+      background-color: #0d6efd;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container my-4">
+  <h1 class="text-center">مواعيد جلسات التطعيم للأطفال</h1>
+
+  <div class="card p-4 mb-4">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label for="edara" class="form-label">اختر الإدارة:</label>
+        <select id="edara" class="form-select">
+          <option value="">-- اختر الإدارة --</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="wahda" class="form-label">اختر الوحدة:</label>
+        <select id="wahda" class="form-select">
+          <option value="">-- اختر الوحدة --</option>
+        </select>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button id="searchBtn" class="btn btn-primary me-2">بحث</button>
+        <button id="resetBtn" class="btn btn-secondary">مسح النتائج</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-3 text-end">
+    <button id="pdfBtn" class="btn btn-success">تحميل PDF</button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered text-center align-middle" id="data-table">
+      <thead>
+        <tr>
+          <th>الإدارة</th>
+          <th>الوحدة</th>
+          <th>من عمر شهرين إلى 9 شهور</th>
+          <th>عند عمر سنة</th>
+          <th>عند عمر سنة ونصف</th>
+          <th>بي سي جي</th>
+        </tr>
+      </thead>
+      <tbody id="data-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let data = [];
+const edaraSelect = document.getElementById('edara');
+const wahdaSelect = document.getElementById('wahda');
+const tableBody = document.getElementById('data-table-body');
+const searchBtn = document.getElementById('searchBtn');
+const resetBtn = document.getElementById('resetBtn');
+const pdfBtn = document.getElementById('pdfBtn');
+
+// تحميل البيانات من ملف CSV
+fetch('vaccine_schedule.csv')
+  .then(res => res.text())
+  .then(text => {
+    let rows = text.split('\n').map(r => r.split(','));
+    rows.shift(); // إزالة العناوين
+    data = rows.filter(r => r.length >= 5).map(r => {
+      let fifthVal = '';
+      let boosterVal = '';
+      if (r[3]) {
+        let parts = r[3].split('،');
+        fifthVal = parts[0] ? parts[0].trim() : '';
+        boosterVal = parts[1] ? parts[1].trim() : '';
+      }
+      return {
+        edara: r[0].trim(),
+        wahda: r[1].trim(),
+        firstToFourth: r[2].trim(),
+        fifth: fifthVal,
+        booster: boosterVal,
+        bcg: r[4] ? r[4].trim() : ''
+      };
+    });
+
+    let edarats = [...new Set(data.map(d => d.edara))];
+    edarats.forEach(e => {
+      let option = document.createElement('option');
+      option.value = e;
+      option.textContent = e;
+      edaraSelect.appendChild(option);
+    });
+  });
+
+// عند تغيير الإدارة تحديث الوحدات
+edaraSelect.addEventListener('change', () => {
+  wahdaSelect.innerHTML = '<option value="">-- اختر الوحدة --</option>';
+  if (edaraSelect.value) {
+    let wahdat = [...new Set(data.filter(d => d.edara === edaraSelect.value).map(d => d.wahda))];
+    wahdat.forEach(w => {
+      let option = document.createElement('option');
+      option.value = w;
+      option.textContent = w;
+      wahdaSelect.appendChild(option);
+    });
+  }
+});
+
+// البحث
+searchBtn.addEventListener('click', () => {
+  tableBody.innerHTML = '';
+  let filtered = data;
+
+  if (edaraSelect.value) {
+    filtered = filtered.filter(d => d.edara === edaraSelect.value);
+  }
+
+  if (wahdaSelect.value) {
+    filtered = filtered.filter(d => d.wahda === wahdaSelect.value);
+  }
+
+  filtered.forEach(d => {
+    let row = `<tr>
+      <td>${d.edara}</td>
+      <td>${d.wahda}</td>
+      <td>${d.firstToFourth}</td>
+      <td>${d.fifth}</td>
+      <td>${d.booster}</td>
+      <td>${d.bcg}</td>
+    </tr>`;
+    tableBody.innerHTML += row;
+  });
+});
+
+// إعادة الوضع الأولي
+resetBtn.addEventListener('click', () => {
+  edaraSelect.value = '';
+  wahdaSelect.innerHTML = '<option value="">-- اختر الوحدة --</option>';
+  tableBody.innerHTML = '';
+});
+
+// تحميل PDF (جدول منسّق)
+pdfBtn.addEventListener('click', () => {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation: 'landscape'});
+  doc.setFontSize(14);
+  doc.text("مواعيد جلسات التطعيم للأطفال", 14, 15);
+
+  // استخراج بيانات الجدول الظاهر
+  let rows = [];
+  let headers = ["الإدارة","الوحدة","من عمر شهرين إلى 9 شهور","عند عمر سنة","عند عمر سنة ونصف","بي سي جي"];
+
+  for (let tr of tableBody.querySelectorAll('tr')) {
+    let cells = tr.querySelectorAll('td');
+    let rowData = [];
+    cells.forEach(td => rowData.push(td.innerText));
+    rows.push(rowData);
+  }
+
+  if (rows.length === 0) {
+    alert("لا يوجد بيانات لتصديرها إلى PDF");
+    return;
+  }
+
+  doc.autoTable({
+    head: [headers],
+    body: rows,
+    startY: 25,
+    styles: {font: "helvetica", fontSize: 10, cellPadding: 2, halign: 'center'},
+    headStyles: {fillColor: [13,110,253]}
+  });
+
+  doc.save("vaccines.pdf");
+});
+</script>
+
+</body>
+</html>
+
