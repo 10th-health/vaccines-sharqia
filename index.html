@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>مواعيد التطعيمات - الشرقية</title>
-  <!-- Bootstrap -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
   <style>
     body {
@@ -65,8 +64,7 @@
           <th>الإدارة</th>
           <th>الوحدة</th>
           <th>من عمر شهرين إلى 9 شهور</th>
-          <th>عند عمر سنة</th>
-          <th>عند عمر سنة ونصف</th>
+          <th>الجرعات عند عمر سنة وسنة ونصف</th>
           <th>بي سي جي</th>
         </tr>
       </thead>
@@ -101,8 +99,8 @@ fetch('vaccine_schedule.csv')
         edara: r[0].trim(),
         wahda: r[1].trim(),
         firstToFourth: r[2].trim(),
-        fifth: fifthVal,
-        booster: boosterVal,
+        combined: (fifthVal || boosterVal) ? 
+          `جرعة سنة: ${fifthVal} – جرعة سنة ونصف: ${boosterVal}` : '',
         bcg: r[4] ? r[4].trim() : ''
       };
     });
@@ -148,8 +146,7 @@ searchBtn.addEventListener('click', () => {
       <td>${d.edara}</td>
       <td>${d.wahda}</td>
       <td>${d.firstToFourth}</td>
-      <td>${d.fifth}</td>
-      <td>${d.booster}</td>
+      <td>${d.combined}</td>
       <td>${d.bcg}</td>
     </tr>`;
     tableBody.innerHTML += row;
